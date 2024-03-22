@@ -26,7 +26,7 @@ eba = read.table("eba1977.txt")
 
 
 #Redefine eba as a factor
-#Reference age is the group 75+
+#Reference age is youngest group
 eba$age<- factor(eba$age)
 eba$age <- relevel(eba$age, ref = "40-54")
 
