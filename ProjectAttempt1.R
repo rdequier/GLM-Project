@@ -15,6 +15,7 @@ library(sandwich)
 library(lmtest)
 library(tidyr)
 library(VGAM)
+library(ggpubr)
 
 ##### Processing Data ######
 
@@ -170,7 +171,7 @@ fit2 = glm(cases~city+NumAge+offset(log(pop)),
            family=poisson(link="log"),
            data=eba)
 
-summary(fit2) #higher devaince than before
+summary(fit2) #higher deviance than before
 glm.RR(fit2)
 
 #Note the quadratic shape of the residuals in this model: justification
@@ -190,6 +191,8 @@ ggplot(eba, aes(NumAge, resid)) +
   geom_smooth()+
   geom_hline(yintercept=0, col="red", lty=2)
 
+plot(fit2)
+
 
 #### Basic Model with no city #####
 fit3 = glm(cases~age+offset(log(pop)),
@@ -203,7 +206,7 @@ fit4 = glm(cases~NumAge+offset(log(pop)),
 
 
 #### Quadratic Model with continuous age #####
-fit5 = glm(cases~city+NumAge+I(NumAge^2)+offset(log(pop)),
+fit5 = glm(cases~city+poly(NumAge,2)+offset(log(pop)),
            family=poisson(link="log"),
            data=eba)
 
@@ -212,7 +215,7 @@ summary(fit5)
 
 
 #### Quadratic Model: Continuous with no city ####
-fit6=glm(cases~NumAge+I(NumAge^2)+offset(log(pop)),
+fit6=glm(cases~poly(NumAge,2)+offset(log(pop)),
          family=poisson(link="log"),
          data=eba)
 
@@ -300,7 +303,7 @@ summary(fit7)
 
 
 #### Fredericia Model: cts age with qaudratic #####
-fit8 <- glm(cases~Fredereica+NumAge+I(NumAge^2)+offset(log(pop)),
+fit8 <- glm(cases~Fredereica+poly(NumAge,2)+offset(log(pop)),
             family=poisson, data=eba)
 
 
@@ -309,139 +312,135 @@ fit8 <- glm(cases~Fredereica+NumAge+I(NumAge^2)+offset(log(pop)),
 #### Model Selection #####
 
 models = list(fit0,fit1, fit2, fit3, fit4, fit5,fit6,fit7, fit8)
-mod.names = c("interaction", "age+city", "cts_age_city", "age_only", "age_only_cts",
+mod.names = c("interaction", "age+city_factor", "cts_age_city", "age_only_factor", "age_only_cts",
               "quadratic_cts","age_only_quadratic","fredericia", "fredericia_quadratic")
 
 aictab(cand.set=models, modnames=mod.names, second.ord=FALSE)
 
+#Two best models are the Linear Factor Model, and Quadratic Continuous Model,
+#Both comparing Fredericia to the other three cities
+summary(fit7)
+summary(fit8)
 
+#GoF tests for the two best models:
+pearson.test(fit7)
+pearson.test(fit8)
 
+deviance.test(fit7)
+deviance.test(fit8)
 
+#### Residual Plots: #####
 
-####### Unsure what order to do the below in:
-#### Residual Plots: Basic Model #####
+#Two best models both contain only the city Frediericia,
 
-### Needs to be updated to apply to the models we select
-
-#Pearson residuals vs fitted values
-resid = resid(fit1, type="pearson")
-fitted=fitted(fit1)
-ggplot(eba, aes(fitted, resid)) +
-  geom_point() +
-  ylab("Pearsons residuals") + xlab("Fitted values")+
-  geom_smooth()+
-  geom_hline(yintercept=0, col="red", lty=2)
-
-#Pearson residuals vs linear predictors
-resid = resid(fit1, type="pearson")
-linpred=fit1$linear.predictors
-ggplot(eba, aes(linpred, resid)) +
-  geom_point() +
-  ylab("Pearsons residuals") + xlab("Linear Predictors")+
-  geom_smooth()+
-  geom_hline(yintercept=0, col="red", lty=2)
-
-#Deviance residuals vs fitted values#
-resid = resid(fit1, type="deviance")
-fitted=fitted(fit1)
-ggplot(eba, aes(fitted, resid)) +
-  geom_point() +
-  ylab("Deviance residuals") + xlab("Fitted values")+
-  geom_smooth()+
-  geom_hline(yintercept=0, col="red", lty=2)
-
-
-
-
-
-
-
-#Pearson residuals vs linear predictors
-resid = resid(fit1, type="deviance")
-linpred=fit1$linear.predictors
-ggplot(eba, aes(linpred, resid)) +
+#deviance residuals vs linear predictors for fits 7 and 8:
+resid = resid(fit7, type="deviance")
+linpred=fit7$linear.predictors
+p1=ggplot(eba,aes(linpred, resid)) +
   geom_point() +
   ylab("Deviance residuals") + xlab("Linear Predictors")+
+  ggtitle("Linear Factor: Deviance")+
+  geom_smooth()+
+  geom_hline(yintercept=0, col="red", lty=2)
+
+resid = resid(fit8, type="deviance")
+linpred=fit8$linear.predictors
+p2=ggplot(eba,aes(linpred, resid)) +
+  geom_point() +
+  ylab("Deviance residuals") + xlab("Linear Predictors")+
+  ggtitle("Quadratic: Deviance")+
   geom_smooth()+
   geom_hline(yintercept=0, col="red", lty=2)
 
 
-#influentail observations:
-influencePlot(fit1)
+#Cook's distance vs index for fits 7 and 8:
+cooks=cooks.distance(fit7)
+p3=ggplot(data.frame(x=seq(cooks),y=cooks))+
+  geom_line(aes(x,y), col="red")+
+  geom_point(aes(x,y)) +
+  ylab("Cook's Distance") + xlab("Index")+
+  ggtitle("Cook's Distance vs Index")+
+  ylim(0,0.6)
 
 
-#Unsure what else we can add to this
+cooks=cooks.distance(fit8)
+p4=ggplot(data.frame(x=seq(cooks),y=cooks))+
+  geom_line(aes(x,y), col="red")+
+  geom_point(aes(x,y)) +
+  ylab("Cook's Distance") + xlab("Index")+
+  ggtitle("Cook's Distance vs. Index")
 
 
+#Linear predictors vs age
+resid = resid(fit7, type="deviance")
+p5=ggplot(eba, aes(NumAge, resid)) +
+  geom_point() +
+  ylab("Deviance residuals") + xlab("Age")+
+  geom_smooth()+
+  geom_hline(yintercept=0, col="red", lty=2)+
+  ggtitle("Linear predictors vs Age")
 
-#### Plotting the 
+
+resid = resid(fit8, type="deviance")
+p6=ggplot(eba, aes(NumAge, resid)) +
+  geom_point() +
+  ylab("Deviance residuals") + xlab("Age")+
+  geom_smooth()+
+  geom_hline(yintercept=0, col="red", lty=2)+
+  ggtitle("Linear Predictors vs Age")
+
+
+ggarrange(p1,p3,p5,p2,p4,p6)
+
+#the only thing I notice is that I notice is that the quadratic model
+#has more influential points. Maybe evidence to take the simpler model.
+
 #### DHARMa residuals to check for over dispersion ####
-
-### Needs to modified to check our models 
-
-
-sim.fit1 = simulateResiduals(fit1, plot=T)
+#Tests for the Linear Factor Model
+sim.fit7 = simulateResiduals(fit7, plot=T)
 
 #histogram should be uniform
-hist(sim.fit1)
-
+hist(sim.fit7)
 
 ## GOF for uniformity of the residuals and overdispersion
 #This one tests uniformity of dharma residuals
-testUniformity(sim.fit1)
+testUniformity(sim.fit7)
 
 #Compares the variance of the pearson residuals
 # of the simulated vs the actual pearson residuals
-testDispersion(sim.fit1)
+testDispersion(sim.fit7)
 
+#Tests for quadratic model:
+sim.fit8 = simulateResiduals(fit8, plot=T)
 
+#histogram should be uniform
+hist(sim.fit8)
 
+## GOF for uniformity of the residuals and overdispersion
+#This one tests uniformity of dharma residuals
+testUniformity(sim.fit8)
 
-
-
+#Compares the variance of the pearson residuals
+# of the simulated vs the actual pearson residuals
+testDispersion(sim.fit8)
 
 
 #### Rootograms #######
-
-#Need to update for chosen fits
-
-#### Quasi-Likelihood to check over dispersion #####
-
-### Needed???
-
-#### Negative binomial model #####
-
-#Is this needed? Need to check for overdispersion in the chosen models
-fit1.nb=glm.nb(cases ~ city + NumAge +I(NumAge^2) + offset(log(pop)), data = eba)
-summary(fit1.nb)
+rootogram(fit7)
+rootogram(fit8)
 
 
 
-#this model does not converge:
-#My guess is because the estimate of of dispersion is 1/theta, therefore
-#becuase there is no quadratic trend, theta is getting a huge values
+##### Prediction with the two models #####
+#Not sure if this is necessary.
+
+#Predictions for fit7: linear factor
+fit7.predictions = cbind(eba[c("city", "age","pop","cases")],
+                         Predicted=round(exp(predict(fit7)),2))
+fit7.predictions
 
 
-
-
-
-#### plotting the mean vs the variance #####
-
-#Not sure if this is right or even necessary. Depends on whether we 
-#find overdispersion in our chosen models...
-xb <- predict(fit1.nb)
-g <- cut(xb, breaks=quantile(xb,seq(0,100,10)/100))
-m <- tapply(eba$cases, g, mean)
-v <- tapply(eba$cases, g, var)
-plot(m, v, xlab="Mean", ylab="Variance", main="Mean-Variance Relationship")
-mtext("Articles Published by Ph.D. Biochemists",padj=-0.5)
-x <- seq(6,10,0.02)
-lines(x, x*summary(fit1.quasi)$dispersion, lty="dashed")
-lines(x, x*(1+x/fit1.nb$theta))
-legend("topleft", lty=c("dashed","solid"),legend=c("Q. Poisson","Neg. Binom."), inset=0.05)
-
-
-
-
-
-
+#Prediction for fit8: quadratic factor
+fit8.predictions = cbind(eba[c("city", "age","pop","cases")],
+                         Predicted=round(exp(predict(fit8)),2))
+fit8.predictions
