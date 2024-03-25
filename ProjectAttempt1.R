@@ -56,7 +56,7 @@ pearson.test= function(model){
 #deviance test function
 deviance.test = function(model){
   dev=deviance(model)
-  res.df = fit1$df.residual
+  res.df =model$df.residual
   return(data.frame(Dev=dev, df=res.df, pvalue=(1-pchisq(dev, res.df))))
 }
 
@@ -66,6 +66,11 @@ deviance.test = function(model){
 
 #Would be nice to update this section to make some of the graphs
 #nicer using ggplot2. I am sure more can be added.
+
+#Check mean vs variances of data
+mean(eba$cases)
+var(eba$cases) #very close: overdispersion may not be an issue
+
 
 #Tables:
 #There are four observations per ages group and 6 observations per city
@@ -191,7 +196,7 @@ ggplot(eba, aes(NumAge, resid)) +
   geom_smooth()+
   geom_hline(yintercept=0, col="red", lty=2)
 
-plot(fit2)
+
 
 
 #### Basic Model with no city #####
@@ -307,8 +312,6 @@ fit8 <- glm(cases~Fredereica+poly(NumAge,2)+offset(log(pop)),
             family=poisson, data=eba)
 
 
-
-
 #### Model Selection #####
 
 models = list(fit0,fit1, fit2, fit3, fit4, fit5,fit6,fit7, fit8)
@@ -378,7 +381,7 @@ p5=ggplot(eba, aes(NumAge, resid)) +
   ylab("Deviance residuals") + xlab("Age")+
   geom_smooth()+
   geom_hline(yintercept=0, col="red", lty=2)+
-  ggtitle("Linear predictors vs Age")
+  ggtitle("Deviance Residuals vs Age")
 
 
 resid = resid(fit8, type="deviance")
@@ -387,7 +390,7 @@ p6=ggplot(eba, aes(NumAge, resid)) +
   ylab("Deviance residuals") + xlab("Age")+
   geom_smooth()+
   geom_hline(yintercept=0, col="red", lty=2)+
-  ggtitle("Linear Predictors vs Age")
+  ggtitle("Deviance Residuals vs Age")
 
 
 ggarrange(p1,p3,p5,p2,p4,p6)
@@ -396,6 +399,15 @@ ggarrange(p1,p3,p5,p2,p4,p6)
 #has more influential points. Maybe evidence to take the simpler model.
 
 #### DHARMa residuals to check for over dispersion ####
+
+#Estimated dispersion parameters for both models:
+sum(residuals(fit7, type="pearson")^2)/(fit7$df.residual)
+sum(residuals(fit8, type="pearson")^2)/(fit8$df.residual)
+
+#regular dispersion tests
+dispersiontest(fit7)
+dispersiontest(fit8)
+
 #Tests for the Linear Factor Model
 sim.fit7 = simulateResiduals(fit7, plot=T)
 
@@ -425,9 +437,10 @@ testUniformity(sim.fit8)
 testDispersion(sim.fit8)
 
 
+
 #### Rootograms #######
-rootogram(fit7)
-rootogram(fit8)
+rootogram(fit7,ylim=c(-1,2))
+rootogram(fit8,ylim=c(-1,2))
 
 
 
@@ -440,7 +453,40 @@ fit7.predictions = cbind(eba[c("city", "age","pop","cases")],
 fit7.predictions
 
 
+
 #Prediction for fit8: quadratic factor
 fit8.predictions = cbind(eba[c("city", "age","pop","cases")],
                          Predicted=round(exp(predict(fit8)),2))
 fit8.predictions
+
+
+
+
+
+
+
+
+
+### plots of poisson distributions ####
+k=seq(0,20,1)
+dists = data.frame(counts=k,
+                   lambda1=dpois(k, lambda=1),
+                   lambda3=dpois(k,lambda=3),
+                   lambda5=dpois(k, lambda=5),
+                   lambda10=dpois(k, lambda=10))
+
+ggplot(data=dists, aes(x=counts))+
+  geom_line(aes(y=lambda1,col="1"))+
+  geom_point(aes(y=lambda1,col="1"))+
+  geom_line(aes(y=lambda3,col="3"))+
+  geom_point(aes(y=lambda3,col="3"))+
+  geom_line(aes(y=lambda5,col="5"))+
+  geom_point(aes(y=lambda5,col="5"))+
+  geom_line(aes(y=lambda10, col="10"))+
+  geom_point(aes(y=lambda10,col="10"))+
+  scale_color_manual(name=expression(lambda),
+                     breaks=c("1","3","5","10"),
+                     values=c("purple","black","blue","red"))+
+  ylab(expression(P(x=k)))+xlab("k")+
+  ggtitle("Poisson Distribtutions")
+                    
