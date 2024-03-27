@@ -16,6 +16,7 @@ library(lmtest)
 library(tidyr)
 library(VGAM)
 library(ggpubr)
+library(kableExtra)
 
 ##### Processing Data ######
 
@@ -67,9 +68,16 @@ deviance.test = function(model){
 #Would be nice to update this section to make some of the graphs
 #nicer using ggplot2. I am sure more can be added.
 
+
+#Does the model follow a poison distribtuion:
+Ord_plot(eba$cases) #read more on what this says
+distplot(eba$cases, type="poisson")
+
 #Check mean vs variances of data
 mean(eba$cases)
 var(eba$cases) #very close: overdispersion may not be an issue
+
+#Check correlation within clusters:
 
 
 #Tables:
@@ -179,22 +187,31 @@ fit2 = glm(cases~city+NumAge+offset(log(pop)),
 summary(fit2) #higher deviance than before
 glm.RR(fit2)
 
+pearson.test(fit2)
+deviance.test(fit2)
+
 #Note the quadratic shape of the residuals in this model: justification
 #For a quadratic model?
 resid = resid(fit2, type="deviance")
-ggplot(eba, aes(NumAge, resid)) +
+r1=ggplot(eba, aes(NumAge, resid)) +
   geom_point() +
   ylab("Deviance residuals") + xlab("Age")+
   geom_smooth()+
-  geom_hline(yintercept=0, col="red", lty=2)
+  geom_hline(yintercept=0, col="red", lty=2)+
+  ggtitle("Deviance Residuals")+
+  theme(plot.title = element_text(hjust = 0.5))
 
 
 resid = resid(fit2, type="pearson")
-ggplot(eba, aes(NumAge, resid)) +
+r2=ggplot(eba, aes(NumAge, resid)) +
   geom_point() +
   ylab("Pearson residuals") + xlab("Age")+
   geom_smooth()+
-  geom_hline(yintercept=0, col="red", lty=2)
+  geom_hline(yintercept=0, col="red", lty=2)+
+  ggtitle("Pearson Residuals")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(r1,r2)
 
 
 
@@ -209,13 +226,14 @@ fit4 = glm(cases~NumAge+offset(log(pop)),
            family=poisson(link="log"),
            data=eba)
 
+pearson.test(fit4)
+deviance.test(fit4)
 
 #### Quadratic Model with continuous age #####
 fit5 = glm(cases~city+poly(NumAge,2)+offset(log(pop)),
            family=poisson(link="log"),
            data=eba)
 
-summary(fit5)
 
 
 
@@ -298,10 +316,11 @@ ggplot(graph_data, aes(x=x, y=rates))+
 #### Fredericia model #####
 
 #Create a new column in the datafame:
-eba$Fredereica = ifelse(eba$city=="Fredericia", "Fredericia", "Other")
+eba$Fredereica = ifelse(eba$city=="Fredericia", 1, 0)
 
 fit7 <- glm(cases~Fredereica+age+offset(log(pop)),
             family=poisson, data=eba)
+
 summary(fit7)
 
 
@@ -314,14 +333,32 @@ fit8 <- glm(cases~Fredereica+poly(NumAge,2)+offset(log(pop)),
 
 #### Model Selection #####
 
-models = list(fit0,fit1, fit2, fit3, fit4, fit5,fit6,fit7, fit8)
-mod.names = c("interaction", "age+city_factor", "cts_age_city", "age_only_factor", "age_only_cts",
-              "quadratic_cts","age_only_quadratic","fredericia", "fredericia_quadratic")
+#omit continuous models with age, unless age is squared:
+#these are fit2 and fit4
 
-aictab(cand.set=models, modnames=mod.names, second.ord=FALSE)
+models = list(fit1, fit3, fit5,fit6,fit7, fit8)
+mod.names = c("Factor: Age+City", "Factor: Age",
+              "Continuous: Age^2+City","Continuous: Age^2",
+              "Factor: Binary City", "Continuous: Binary City+Age^2")
+
+
+aic_table = aictab(cand.set=models, modnames=mod.names, second.ord=FALSE)
+#Create table for latex
+aic_table=data.frame(aic_table)
+aic_table = aic_table %>% mutate_if(is.numeric,
+                        round,
+                        digits=2) %>% 
+  dplyr::select(Modnames,AIC, Delta_AIC, AICWt)
+
+kable(aic_table, "latex", booktabs=T)
+
 
 #Two best models are the Linear Factor Model, and Quadratic Continuous Model,
 #Both comparing Fredericia to the other three cities
+fit7.table = round(summary(fit7)$coefficients,3) #table for fit 7
+kable(fit7.table,"latex", booktabs=T)
+
+
 summary(fit7)
 summary(fit8)
 
@@ -331,6 +368,26 @@ pearson.test(fit8)
 
 deviance.test(fit7)
 deviance.test(fit8)
+
+
+ #### LR + Wald Tests for the two models #####
+
+
+#fit7
+Anova(fit7, test = "LR",type=3)
+Anova(fit7, test = "Wald",type=3)
+
+kable(Anova(fit7, test = "LR",type=3), "latex", booktabs=T)
+kable(Anova(fit7, test = "Wald",type=3),"latex", booktabs=T)
+
+#exporting to latex:
+
+
+#fit8
+Anova(fit7, test = "LR",type=3)
+Anova(fit7, test = "Wald",type=3)
+
+
 
 #### Residual Plots: #####
 
@@ -398,6 +455,8 @@ ggarrange(p1,p3,p5,p2,p4,p6)
 #the only thing I notice is that I notice is that the quadratic model
 #has more influential points. Maybe evidence to take the simpler model.
 
+
+
 #### DHARMa residuals to check for over dispersion ####
 
 #Estimated dispersion parameters for both models:
@@ -439,8 +498,9 @@ testDispersion(sim.fit8)
 
 
 #### Rootograms #######
-rootogram(fit7,ylim=c(-1,2))
-rootogram(fit8,ylim=c(-1,2))
+library(topmodels)
+topmodels::rootogram(fit7,ylim=c(-1,2))
+topmodels::rootogram(fit8,ylim=c(-1,2))
 
 
 
@@ -490,3 +550,82 @@ ggplot(data=dists, aes(x=counts))+
   ylab(expression(P(x=k)))+xlab("k")+
   ggtitle("Poisson Distribtutions")
                     
+
+
+
+
+#### QuasiPoisson + Sandwich Estimator ####
+
+#Sandwich Estimator on normal model:
+
+coeftest(fit7)
+coeftest(fit7, vcov = sandwich)
+coeftest(fit8)
+coeftest(fit8, vcov=sandwich)
+
+
+#QausiPoisson:
+
+fit7.quasi = glm(cases~Fredereica+age+offset(log(pop)),
+                 family=quasipoisson, data=eba)
+summary(fit7.quasi)
+#coefficient test with robust estimator
+coeftest(fit7.quasi)
+coeftest(fit7.quasi, vcov=sandwich)
+#LR +  Wald Tests
+Anova(fit7.quasi, test = "Wald",type=3)
+Anova(fit7.quasi, test = "LR",type=3)
+
+
+fit8.quasi = glm(cases~Fredereica+poly(NumAge,2)+offset(log(pop)),
+                 family=quasipoisson, data=eba)
+summary(fit8.quasi)
+
+coeftest(fit7.quasi, vcov=sandwich)
+
+#The big mystery: why do standard errors DECREASE when we use 
+#the sandwich estimator???? 
+
+
+#### Idea: different link function: #####
+
+fit7.sqrt = glm(cases~Fredereica+age+offset(log(pop)),
+                family=poisson(link="sqrt"), data=eba)
+summary(fit7.sqrt)
+
+Anova(fit7.sqrt, test = "Wald",type=3)
+Anova(fit7.sqrt, test = "LR",type=3)
+
+sum(residuals(fit7.sqrt, type="pearson")^2)/(fit7.sqrt$df.residual)
+
+
+fit8.sqrt = glm(cases~Fredereica+poly(NumAge,2)+offset(log(pop)),
+                family=poisson(link="sqrt"), data=eba)
+summary(fit8.sqrt)
+
+sum(residuals(fit8.sqrt, type="pearson")^2)/(fit8.sqrt$df.residual)
+
+
+
+
+### Alternate idea: Binomial model
+
+fit7.bin = glm(cases/pop~Fredereica+age, weights=pop, data=eba, 
+               family=binomial)
+summary(fit7.bin)
+drop1(fit7.bin, test="Chisq")
+
+sum(residuals(fit7.bin, type="pearson")^2)/(fit7.bin$df.residual)
+
+
+fit8.bin = glm(cases/pop~poly(NumAge,2)+Fredereica, weights=pop, data=eba, family="binomial")
+summary(fit8.bin)
+drop1(fit8.bin, test="Chisq")
+
+sum(residuals(fit8.bin, type="pearson")^2)/(fit8.bin$df.residual)
+
+
+#### Beta Binomial ####
+library(aod)
+beta=betabin(cbind(cases, pop-cases)~Fredereica+poly(NumAge,2),~1,  data=eba)
+summary(beta)
