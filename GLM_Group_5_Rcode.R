@@ -548,7 +548,7 @@ fit7.quasi = glm(cases~Fredericia+age+offset(log(pop)),
                  family=quasipoisson, data=eba)
 summary(fit7.quasi)
 #coefficient test with robust estimator
-coeftest(fit7.quasi)
+
 
 #LR +  Wald Tests
 Anova(fit7.quasi, test = "Wald",type=3)
